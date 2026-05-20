@@ -1,62 +1,61 @@
-from fastapi import FastAPI,HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
-import redis,uuid,json,os
+from sqlalchemy.orm import Session
+import redis, uuid, json, os
 from dotenv import load_dotenv
+from database import get_db, JobRecord, init_db
+
 load_dotenv()
 
-app = FastAPI(title="Job orchestration platform")
-r = redis.from_url(os.getenv("REDIS_URL"))
+app = FastAPI(title="Job Orchestration Platform")
+r = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
+
+@app.on_event("startup")
+def startup():
+    init_db()
+
 class JobRequest(BaseModel):
-    name:str
-    description:str
-    priority:int=5
-class JobResponse(BaseModel):
-    job_id: str
     name: str
-    status: str
-    priority: int
-@app.post("/jobs", response_model=JobResponse)
-def create_job(job: JobRequest):
+    description: str
+    priority: int = 5
+
+@app.post("/jobs")
+def create_job(job: JobRequest, db: Session = Depends(get_db)):
     if not 1 <= job.priority <= 10:
-        raise HTTPException(status_code=400, detail="Priority must be between 1 and 10")
+        raise HTTPException(status_code=400, detail="Priority must be 1-10")
 
     job_id = str(uuid.uuid4())
     job_data = {
-        "id":          job_id,
-        "name":        job.name,
-        "description": job.description,
-        "priority":    job.priority,
-        "status":      "pending"
+        "id": job_id, "name": job.name,
+        "description": job.description, "priority": job.priority
     }
+
     r.zadd("job_queue", {json.dumps(job_data): job.priority})
-    r.hset(f"job:{job_id}", mapping={
-        "status":      "pending",
-        "name":        job.name,
-        "description": job.description,
-        "priority":    job.priority
-    })
-    return JobResponse(
-        job_id=job_id,
-        name=job.name,
-        status="pending",
-        priority=job.priority
+    db_job = JobRecord(
+        id=job_id, name=job.name,
+        description=job.description, priority=job.priority, status="pending"
     )
+    db.add(db_job)
+    db.commit()
+
+    return {"job_id": job_id, "status": "pending", "priority": job.priority}
+
 @app.get("/jobs/{job_id}")
-def get_job(job_id: str):
-    job=r.hgetall(f"job:{job_id}")
+def get_job(job_id: str, db: Session = Depends(get_db)):
+    job = db.query(JobRecord).filter(JobRecord.id == job_id).first()
     if not job:
-        return HTTPException(status_code=404, detail="Job not found")
-    return {k.decode(): v.decode() for k, v in job.items()}
-@app.get("/jobs")
-def list_jobs():
-    all_jobs=r.zrange("job_queue",0,-1,withscores=True)
+        raise HTTPException(status_code=404, detail="Job not found")
     return {
-        "pending_count": len(all_jobs),
-        "jobs": [
-            {"data": json.loads(job), "priority": score}
-            for job, score in all_jobs
-        ]
+        "job_id": job.id, "name": job.name, "status": job.status,
+        "priority": job.priority, "created_at": str(job.created_at),
+        "started_at": str(job.started_at), "completed_at": str(job.completed_at)
     }
+
+@app.get("/jobs")
+def list_jobs(db: Session = Depends(get_db)):
+    jobs = db.query(JobRecord).order_by(JobRecord.created_at.desc()).limit(50).all()
+    return [{"id": j.id, "name": j.name, "status": j.status, "priority": j.priority} for j in jobs]
+
 @app.get("/health")
 def health():
     r.ping()

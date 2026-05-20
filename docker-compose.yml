@@ -1,0 +1,42 @@
+version: "3.8"
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://bhaskar:secret@postgres:5432/jobs
+    depends_on:
+      - redis
+      - postgres
+    volumes:
+      - .:/app
+  worker:
+    build: .
+    command: python worker.py
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://bhaskar:secret@postgres:5432/jobs
+    depends_on:
+      - redis
+      - postgres
+    deploy:
+      replicas: 3   
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: jobs
+      POSTGRES_USER: bhaskar
+      POSTGRES_PASSWORD: secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
