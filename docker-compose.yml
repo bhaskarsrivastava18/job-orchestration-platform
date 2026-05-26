@@ -10,8 +10,6 @@ services:
     depends_on:
       - redis
       - postgres
-    volumes:
-      - .:/app
   worker:
     build: .
     command: python worker.py
