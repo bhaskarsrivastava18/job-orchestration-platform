@@ -1,30 +1,62 @@
 version: "3.8"
+
 services:
   api:
     build: .
     ports:
       - "8000:8000"
+      - "8001:8001"  
     environment:
       - REDIS_URL=redis://redis:6379
       - DATABASE_URL=postgresql://bhaskar:secret@postgres:5432/jobs
     depends_on:
       - redis
       - postgres
-  worker:
+
+  worker1:
     build: .
     command: python worker.py
     environment:
       - REDIS_URL=redis://redis:6379
       - DATABASE_URL=postgresql://bhaskar:secret@postgres:5432/jobs
+      - METRICS_PORT=8002
+    ports:
+      - "8002:8002"
     depends_on:
       - redis
       - postgres
-    deploy:
-      replicas: 3   
+
+  worker2:
+    build: .
+    command: python worker.py
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://bhaskar:secret@postgres:5432/jobs
+      - METRICS_PORT=8003
+    ports:
+      - "8003:8003"
+    depends_on:
+      - redis
+      - postgres
+
+  worker3:
+    build: .
+    command: python worker.py
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://bhaskar:secret@postgres:5432/jobs
+      - METRICS_PORT=8004
+    ports:
+      - "8004:8004"
+    depends_on:
+      - redis
+      - postgres
+
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+
   postgres:
     image: postgres:15
     environment:
@@ -36,5 +68,26 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
 volumes:
   postgres_data:
+  grafana_data:
