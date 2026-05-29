@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends 
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import redis, uuid, json, os, time
@@ -7,7 +7,8 @@ from database import get_db, JobRecord, init_db
 from metrics import (
     jobs_submitted, rate_limit_hits, queue_depth,
     start_metrics_server
-)
+) 
+
 from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 app = FastAPI(title="Job Orchestration Platform")
